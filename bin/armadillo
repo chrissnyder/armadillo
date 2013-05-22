@@ -1,0 +1,42 @@
+#!/usr/bin/env coffee
+
+optimist = require 'optimist'
+path = require 'path'
+Rabbit = require '../lib/armadillo'
+
+cwd = process.cwd()
+
+options = optimist.usage('''
+  Usage:
+    armadillo some-project some-bucket-name
+''').options({
+  f: alias: 'json', description: 'Path and filename of the subjects.json'
+  k: alias: 'key', description: 'AWS access key ID'
+  s: alias: 'secret', description: 'AWS secret access key'
+  c: alias: 'config', description: 'Configuration file'
+  h: alias: 'help', description: 'Show options'
+  v: alias: 'version', description: 'Show the version number'
+}).argv
+
+if options.help
+  optimist.showHelp()
+  process.exit 0
+
+if options.version
+  {name, version} = require '../package'
+  console.log "#{name} v#{version}"
+  process.exit 0
+
+try
+  config = require path.resolve cwd, options.config || 'armadillo'
+  options[option] = value for option, value of config when not (option of options)
+
+# Unpack command line arguments
+{_: [project, bucket]} = options
+
+project = project || options.project
+bucket = bucket || options.bucket
+json = options.json || 'offline/subjects.json'
+
+armadillo = new Armadillo { project, bucket, json, options }
+armadillo.go()
