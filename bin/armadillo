@@ -2,7 +2,7 @@
 
 optimist = require 'optimist'
 path = require 'path'
-Rabbit = require '../lib/armadillo'
+Armadillo = require '../lib/armadillo'
 
 cwd = process.cwd()
 

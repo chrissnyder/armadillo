@@ -6,20 +6,14 @@ phantom = require 'node-phantom'
 
 class Armadillo extends EventEmitter
 
-  # 1. Retrieve current subjects.json
-  # 2. Determine if subjects need to be refreshed.
-  # 3. If so, eliminate finished subjects and add new ones.
-  # 4. Save subjects.json back to bucket
-
   project: ''
   bucket: ''
 
   host: 'https://dev.zooniverse.org'
   json: 'offline/subjects.json'
 
-  subjectsToFetch: 0
-  offlineJson: ''
-  validSubjects: []
+  limit: 3
+  subjects: []
 
   options: null
 
@@ -35,10 +29,8 @@ class Armadillo extends EventEmitter
   go: =>
     async.auto
       getHost: @getHost
-      getOfflineManifest: @getOfflineManifest
-      checkSubjects: ['getHost', 'getOfflineManifest', @checkSubjects]
-      refillSubjects: ['checkSubjects', @refillSubjects]
-      save: ['refillSubjects', @save]
+      getSubjects: ['getHost', @getSubjects]
+      save: ['getSubjects', @save]
     , (err) =>
       if err
         console.log 'Error:', err
@@ -66,62 +58,11 @@ class Armadillo extends EventEmitter
 
             callback null, @host
 
-  getOfflineManifest: (callback) =>
-    @s3.getFile @json, (err, res) =>
-      if err
-        callback err, null
-        return
-
-      res.on 'data', (chunk) =>
-        @offlineJson += chunk
-
-      res.on 'end', =>
-        try
-          @offlineJson = JSON.parse @offlineJson
-        catch e
-          # JSON was malformed in subjects.json.
-          @subjectsToFetch = 3
-          @offlineJson = []
-
-        callback null, @offlineJson
-
-  checkSubjects: (callback) =>
-    @offlineZooIds = []
-
-    for subject in @offlineJson
-      unless "zooniverse_id" in subject
-        @subjectsToFetch += 1
-
-      else
-        @offlineZooIds.push subject.zooniverse_id
-
-    options =
-      body: { subject_ids: @offlineZooIds }
-      url: "#{ @host }/projects/#{ @project }/subjects/batch"
-      method: 'POST'
-      json: true
-      strictSSL: false
-
-    request options, (err, res, fetchedSubjects) =>
-      if err
-        callback err, null
-        return
-
-      for subject in fetchedSubjects
-
-        if subject.state is 'active'
-          @validSubjects.push subject
-
-        else
-          @subjectsToFetch += 1
-
-      callback null, fetchedSubjects
-
-  refillSubjects: (callback) =>
+  getSubjects: (callback) =>
     options = 
       url: "#{ @host }/projects/#{ @project }/subjects"
       qs:
-        limit: Math.min @subjectsToFetch, 3
+        limit: @limit
       strictSSL: false
 
     request options, (err, res, rawSubjects) =>
@@ -130,12 +71,12 @@ class Armadillo extends EventEmitter
         return
 
       for subject in JSON.parse(rawSubjects)
-        @validSubjects.push subject
+        @subjects.push subject
 
-      callback null, @validSubjects
+      callback null, @subjects
 
   save: (callback) =>
-    buffer = new Buffer JSON.stringify @validSubjects
+    buffer = new Buffer JSON.stringify @subjects
 
     headers =
       'x-amz-acl': 'public-read'
