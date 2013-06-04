@@ -1,10 +1,7 @@
-{EventEmitter} = require 'events'
-
-async = require 'async'
+url = require 'url'
 request = require 'request'
-phantom = require 'node-phantom'
 
-class Armadillo extends EventEmitter
+class Armadillo
 
   project: ''
   bucket: ''
@@ -15,7 +12,7 @@ class Armadillo extends EventEmitter
   limit: 3
   subjects: []
 
-  options: null
+  options: {}
 
   constructor: (params = {}) ->
     @[property] = value for own property, value of params when property of @
@@ -27,19 +24,19 @@ class Armadillo extends EventEmitter
       bucket: @bucket
 
   go: =>
-    async.auto
+    require('async').auto
       getHost: @getHost
       getSubjects: ['getHost', @getSubjects]
       save: ['getSubjects', @save]
     , (err) =>
-      if err
+      if err?
         console.log 'Error:', err
 
       process.exit()
 
   # In general order of calling
   getHost: (callback) =>
-    phantom.create (err, ph) =>
+    require('node-phantom').create (err, ph) =>
       ph.createPage (err, page) =>
         page.open @url(), (err, status) =>
           if err
@@ -49,18 +46,23 @@ class Armadillo extends EventEmitter
 
           page.evaluate ->
             return window.zooniverse.Api.current.proxyFrame.host
-          , (err, @host) ->
+          , (err, @host) =>
             ph.exit()
 
             if err
               callback err, null
               return
+            else unless @host?
+              callback 'Failed to retrieve API host from page.', null
+              return
+            else unless url.parse @host
+              callback 'Host retrieved is invalid URI', null
 
             callback null, @host
 
   getSubjects: (callback) =>
     options = 
-      url: "#{ @host }/projects/#{ @project }/subjects"
+      url: url.resolve(@host, "/projects/#{ @project }/subjects")
       qs:
         limit: @limit
       strictSSL: false
@@ -68,6 +70,9 @@ class Armadillo extends EventEmitter
     request options, (err, res, rawSubjects) =>
       if err
         callback err, null
+        return
+      else unless rawSubjects.length
+        callback 'No active subjects.', null
         return
 
       for subject in JSON.parse(rawSubjects)
