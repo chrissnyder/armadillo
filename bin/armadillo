@@ -31,7 +31,6 @@ try
   config = require path.resolve cwd, options.config || 'armadillo'
   options[option] = value for option, value of config when not (option of options)
 
-# Unpack command line arguments
 {_: [project, bucket]} = options
 
 project = project || options.project

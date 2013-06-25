@@ -1,5 +1,8 @@
-url = require 'url'
+async = require 'async'
+AWS = require 'aws-sdk'
+phantom = require 'node-phantom'
 request = require 'request'
+url = require 'url'
 
 class Armadillo
 
@@ -18,25 +21,24 @@ class Armadillo
     @[property] = value for own property, value of params when property of @
 
     # S3
-    @s3 = require('knox').createClient
-      key: @options.key || process.env.S3_ACCESS_ID
-      secret: @options.secret || process.env.S3_SECRET_KEY
-      bucket: @bucket
+    @s3 ?= new AWS.S3
+      accessKeyId: @options.key || process.env.AMAZON_ACCESS_KEY_ID
+      secretAccessKey: @options.secret || process.env.AMAZON_SECRET_ACCESS_KEY
+      region: @options.region || 'us-east-1'
 
   go: =>
-    require('async').auto
+    async.auto
       getHost: @getHost
       getSubjects: ['getHost', @getSubjects]
       save: ['getSubjects', @save]
     , (err) =>
-      if err?
-        console.log 'Error:', err
+      if err? then console.log 'Error:', err
 
       process.exit()
 
   # In general order of calling
   getHost: (callback) =>
-    require('node-phantom').create (err, ph) =>
+    phantom.create (err, ph) =>
       ph.createPage (err, page) =>
         page.open @url(), (err, status) =>
           if err
@@ -83,16 +85,18 @@ class Armadillo
   save: (callback) =>
     buffer = new Buffer JSON.stringify @subjects
 
-    headers =
-      'x-amz-acl': 'public-read'
-      'Content-Type': 'application/json'
+    @s3.putObject
+      Bucket: @bucket
+      Key: @json
+      ACL: 'public-read'
+      Body: buffer
+      ContentType: 'application/json'
+      (err, res) ->
+        if err
+          callback err, null
+          return
 
-    @s3.putBuffer buffer, @json, headers, (err, res) ->
-      if err
-        callback err, null
-        return
-
-      callback null, res
+        callback null, res
 
   url: =>
     # Attempt to derive the url from the bucket
