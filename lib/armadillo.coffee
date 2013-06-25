@@ -32,9 +32,11 @@ class Armadillo
       getSubjects: ['getHost', @getSubjects]
       save: ['getSubjects', @save]
     , (err) =>
-      if err? then console.log 'Error:', err
+      if err?
+        console.log "Error updating #{ @project }:", err
+      else
+        console.log "Updated offline subjects for #{ @project }"
 
-      console.log "Updated offline subjects for #{ @project }"
       process.exit()
 
   # In general order of calling
