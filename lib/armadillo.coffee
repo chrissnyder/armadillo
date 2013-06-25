@@ -34,6 +34,7 @@ class Armadillo
     , (err) =>
       if err? then console.log 'Error:', err
 
+      console.log "Updated offline subjects for #{ @project }"
       process.exit()
 
   # In general order of calling
