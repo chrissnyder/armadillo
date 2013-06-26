@@ -26,7 +26,7 @@ class Armadillo
       secretAccessKey: @options.secret || process.env.AMAZON_SECRET_ACCESS_KEY
       region: @options.region || 'us-east-1'
 
-  go: =>
+  go: (callback) =>
     async.auto
       getHost: @getHost
       getSubjects: ['getHost', @getSubjects]
@@ -37,7 +37,7 @@ class Armadillo
       else
         console.log "Updated offline subjects for #{ @project }"
 
-      process.exit()
+      callback() if callback 
 
   # In general order of calling
   getHost: (callback) =>
@@ -66,24 +66,40 @@ class Armadillo
             callback null, @host
 
   getSubjects: (callback) =>
-    options = 
-      url: url.resolve(@host, "/projects/#{ @project }/subjects")
-      qs:
-        limit: @limit
+    @subjects = []
+
+    # Determine if a project has groups
+    options =
+      url: url.resolve(@host, "projects/#{ @project }")
+      json: true
       strictSSL: false
 
-    request options, (err, res, rawSubjects) =>
-      if err
-        callback err, null
-        return
-      else unless rawSubjects.length
-        callback 'No active subjects.', null
-        return
+    request options, (err, res, rawProject) =>
 
-      for subject in JSON.parse(rawSubjects)
-        @subjects.push subject
+      if rawProject.groups?
+        groupOptions = []
 
-      callback null, @subjects
+        for groupId, groupData of rawProject.groups
+          groupOptions.push
+            url: url.resolve(@host, "/projects/#{ @project }/groups/#{ groupId }/subjects")
+            qs:
+              limit: @limit
+            strictSSL: false
+
+        async.eachSeries groupOptions, @requestSubjects, (err) =>
+          if err
+            callback err, null
+          else
+            callback null, @subjects
+
+      else
+        options = 
+          url: url.resolve(@host, "/projects/#{ @project }/subjects")
+          qs:
+            limit: @limit
+          strictSSL: false
+
+        @requestSubjects options, callback
 
   save: (callback) =>
     buffer = new Buffer JSON.stringify @subjects
@@ -100,6 +116,20 @@ class Armadillo
           return
 
         callback null, res
+
+  requestSubjects: (options, callback) =>
+    request options, (err, res, rawSubjects) =>
+      if err
+        callback err, null
+        return
+      else unless rawSubjects.length
+        callback 'No active subjects.', null
+        return
+
+      for subject in JSON.parse(rawSubjects)
+        @subjects.push subject
+
+      callback null, @subjects
 
   url: =>
     # Attempt to derive the url from the bucket

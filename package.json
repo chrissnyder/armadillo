@@ -1,6 +1,6 @@
 {
   "name": "armadillo",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "bin": {
     "armadillo": "./bin/armadillo"
   },
